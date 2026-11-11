@@ -98,6 +98,41 @@ def test_retry_arriving_later_is_still_a_replay():
     assert copy["replay"] is True and copy["decision"] == "granted"
     assert copy["credit_after"] == first["credit_after"]
     assert p.credit_of("freshcart") == BASELINE_CREDIT + 1
+    # Single-use grant: the original was the one delivery.
+    assert "data" not in copy and copy["data_withheld"] == "expired"
+
+
+def test_replay_inside_window_still_carries_data():
+    p = portal()
+    g = p.request(req("r1", task="meal_plan", tier="L2",
+                      fields=["glucose_patterns", "constraints"], at=1))
+    ok = p.fetch({"request_id": "f1", "grant_id": g["grant_id"],
+                  "agent_id": "a1", "at": 5})
+    again = p.fetch({"request_id": "f1", "grant_id": g["grant_id"],
+                     "agent_id": "a1", "at": 6})
+    assert again["replay"] is True
+    assert again["data"] == ok["data"]
+
+
+def test_replay_after_expiry_withholds_data_and_keeps_credit():
+    # Retry is idempotent (credit moves once), but whether data may be
+    # sent is decided now, not taken from the cache.
+    p = portal()
+    g = p.request(req("r1", task="meal_plan", tier="L2",
+                      fields=["glucose_patterns", "constraints"], at=1))
+    ok = p.fetch({"request_id": "f1", "grant_id": g["grant_id"],
+                  "agent_id": "a1", "at": 5})
+    credit = p.credit_of("freshcart")
+    late = p.fetch({"request_id": "f1", "grant_id": g["grant_id"],
+                    "agent_id": "a1", "at": 10})
+    assert late["replay"] is True and late["decision"] == ok["decision"]
+    assert late["credit_after"] == ok["credit_after"]
+    assert p.credit_of("freshcart") == credit
+    assert "data" not in late and late["data_withheld"] == "expired"
+    late_req = p.request(req("r1", task="meal_plan", tier="L2",
+                             fields=["glucose_patterns", "constraints"],
+                             at=10))
+    assert late_req["replay"] is True and "data" not in late_req
 
 
 def test_http_round_trip():

@@ -15,8 +15,10 @@ Rules (product concept v3):
   agent instance, and only changes friction: validity length, renewal,
   and how often the person must confirm.
 * Retrying the same request_id with identical content returns the
-  original decision without touching credit again. Reusing a request_id
-  for different content is refused as a conflict.
+  original decision without touching credit again. Data comes with the
+  replay only if the grant is still valid at the replay's time; after
+  expiry the replay says ``data_withheld: "expired"``. Reusing a
+  request_id for different content is refused as a conflict.
 
 Time is passed in by the caller in days, so a simulation with logical
 time gets deterministic decisions.
@@ -29,7 +31,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-POLICY_VERSION = "loom-policy-0.1.0"
+POLICY_VERSION = "loom-policy-0.1.1"
 
 TIERS = ["L0", "L1", "L2", "L3"]          # L0 deepest, L3 shallowest
 TIER_FIELDS = {
@@ -141,7 +143,17 @@ class Portal:
                 return {"decision": "conflict", "request_id": key,
                         "reason": "request_id reused with different content",
                         "replay": False, "policy": POLICY_VERSION}
-            return dict(prev, replay=True)
+            out = dict(prev, replay=True)
+            # A replay keeps the original decision and never moves credit
+            # again, but data is only re-sent while the grant is still
+            # valid at the replay's time. Otherwise the cache would leak
+            # data after expiry (or a second copy of a single-use grant).
+            if "data" in out:
+                g = self.grants.get(out.get("grant_id", ""))
+                if g is None or float(body.get("at", 0)) > g.expires_at:
+                    out.pop("data")
+                    out["data_withheld"] = "expired"
+            return out
         out = fn()
         out.update(request_id=key, replay=False, policy=POLICY_VERSION,
                    op=op)

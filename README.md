@@ -6,11 +6,11 @@ receive (L0 raw signal, L1 readings, L2 patterns, L3 constraints), for how
 long, and with how much friction. Standard library only.
 
 ```bash
-pip install "git+https://github.com/jasonpipi/loom-portal@v0.1.0"
+pip install "git+https://github.com/jasonpipi/loom-portal@v0.1.1"
 loom-portal --port 8787 --seed-credit cambridge-clinic=85
 ```
 
-## Rules (`loom-policy-0.1.0`)
+## Rules (`loom-policy-0.1.1`)
 
 | Task | Deepest tier | Fields | Validity | Category |
 |---|---|---|---|---|
@@ -22,7 +22,7 @@ loom-portal --port 8787 --seed-credit cambridge-clinic=85
 - Overreach (deeper tier or extra field): blocked, publisher −20.
 - Fetch after expiry: denied, −5. Clean grant: +1. Baseline credit 60.
 - Credit sets friction only. At 80 or above: auto-renew, confirm only beyond the rules. From 50 to 79: confirm on first request. Below 50: confirm every time, one-time snapshot.
-- Same `request_id` with the same content (receive time excluded) is a replay. Different content is a 409 conflict.
+- Same `request_id` with the same content (receive time excluded) is a replay: same decision, no credit change. A replay carries data only while the grant is still valid at the replay's time; after expiry it returns `data_withheld: "expired"`. Different content is a 409 conflict.
 
 ## API
 
